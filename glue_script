@@ -5,6 +5,7 @@ from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue.dynamicframe import DynamicFrame
+from pyspark.sql.types import *
 
 # @params: [TempDir, JOB_NAME]
 args = getResolvedOptions(sys.argv, ['TempDir','JOB_NAME'])
@@ -15,20 +16,20 @@ spark = glueContext.spark_session
 job = Job(glueContext)
 job.init(args['JOB_NAME'], args)
 
-datasource0 = glueContext.create_dynamic_frame.from_catalog(database = "Glue_DB_Name", table_name = "Glue_Table_Name", transformation_ctx = "datasource0")
-
+datasource0 = glueContext.create_dynamic_frame.from_catalog(database = "kafka_topics", table_name = "new_kafka_topic", transformation_ctx = "datasource0")
 
 # Covert DynamicFrame into Spark DataFrame
 sdf = datasource0.toDF()
 
-'''
-You can filter or transform the data using Spark Functions
-'''
+sdf = sdf.withColumn('CustomerKey', sdf['CustomerKey'].cast(IntegerType()))
+sdf = sdf.withColumn('YearlyIncome', sdf['YearlyIncome'].cast(DecimalType(20,2)))
+
+# sdf.printSchema()
 
 # Covert DataFrame back to DynamicFrame
-ddf = DynamicFrame.fromDF(sdf,glueContext,"doc_dtl_final_ddf")
+ddf = DynamicFrame.fromDF(sdf,glueContext,"sdf")
 
-applymapping1 = ApplyMapping.apply(frame = ddf, mappings = [("DynamicFrameField1", "DynamicFrameDataType1", "RedshiftField1", "RedshiftDataType1"), ("DynamicFrameField2", "DynamicFrameDataType2", "RedshiftField2", "RedshiftDataType2"), ("DynamicFrameField3", "DynamicFrameDataType3", "RedshiftField3", "RedshiftDataType3"), ("DynamicFrameField4", "DynamicFrameDataType4", "RedshiftField4", "RedshiftDataType4")], transformation_ctx = "applymapping1")
+applymapping1 = ApplyMapping.apply(frame = ddf, mappings = [("customerkey", "INT", "customerkey", "INT"), ("firstname", "string", "firstname", "string"), ("lastname", "string", "lastname", "string"), ("yearlyincome", "decimal(20,2)", "yearlyincome", "decimal(20,2)")], transformation_ctx = "applymapping1")
 
-datasink4 = glueContext.write_dynamic_frame.from_jdbc_conf(frame = applymapping1, catalog_connection = "connection_name", connection_options = {"dbtable": "dbo.tabel_name", "database": "db_name"}, redshift_tmp_dir = args["TempDir"], transformation_ctx = "datasink4")
+datasink4 = glueContext.write_dynamic_frame.from_jdbc_conf(frame = applymapping1, catalog_connection = "redshift", connection_options = {"dbtable": "dbo.customer", "database": "dev"}, redshift_tmp_dir = args["TempDir"], transformation_ctx = "datasink4")
 job.commit()
