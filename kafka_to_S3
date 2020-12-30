@@ -1,0 +1,41 @@
+from kafka import KafkaConsumer
+import json
+from io import BytesIO
+import pandas as pd
+from datetime import datetime
+import boto3
+
+s3 = boto3.client('s3')
+
+# S3 Bucket
+bucket_name = 'your_bucket_name'
+
+# File Name
+file_name = 'your_file_name'
+
+consumer = KafkaConsumer(
+    "customers",
+    bootstrap_servers='IP_ADDR:9092',
+    auto_offset_reset='earliest',
+    group_id='AWS S3',
+    value_deserializer=lambda m:json.loads(m.decode('utf-8')))
+
+print("starting the consumer")
+i = 0
+l1 = []
+for msg in consumer:
+    test = msg.value
+    l1.append(test)
+    i = i + 1
+    if i >= 6000:
+        df = pd.DataFrame(l1)
+        f = BytesIO()
+        df.to_parquet(f)
+        f.seek(0)
+        current_date = datetime.now()
+        s3.put_object(Body=f, Bucket=bucket_name, Key=f'{current_date}/{file_name}')
+        i = 0
+        l1 = []
+        print('Uploading')
+
+
